@@ -28,7 +28,7 @@ def main(config):
     decay_epoch = int(epoch*decay_ratio)
 
     config.augmentation_prob = augmentation_prob
-    config.num_epochs = epoch
+    config.num_epochs = 45
     config.lr = lr
     config.num_epochs_decay = decay_epoch
 
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     parser.add_argument('--output_ch', type=int, default=1)
     parser.add_argument('--num_epochs', type=int, default=100)
     parser.add_argument('--num_epochs_decay', type=int, default=70)
-    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=2)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--lr', type=float, default=0.0002)
     parser.add_argument('--beta1', type=float, default=0.5)        # momentum1 in Adam

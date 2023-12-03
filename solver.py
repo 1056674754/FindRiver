@@ -10,7 +10,33 @@ import torch.nn.functional as F
 from evaluation import *
 from network import U_Net,R2U_Net,AttU_Net,R2AttU_Net
 import csv
+import matplotlib.pyplot as plt
+from PIL import Image
+cmap = plt.cm.jet
 
+def create_depth_color(depth):
+    d_min = np.min(depth)
+    d_max = np.max(depth)
+    depth_relative = (depth - d_min) / (d_max - d_min)
+    depth = (255 * cmap(depth_relative)[:, :, :3])
+    return depth
+
+def save_image(img, SR, GT, batch):
+	# Image.fromarray(((np.transpose(valid_mask.cpu().detach().numpy()[0], [1, 2, 0])[:, :, 0])*65533).astype('uint8')).save('valid_mask.png')
+	#pred = torch.mul(x, valid_mask)
+	#pred = torch.mul(pred, valid_mask)
+	SR = SR.cpu().detach().numpy()
+	GT = GT.cpu().detach().numpy()
+	orig = img.cpu().detach().numpy()
+
+	SR = create_depth_color(np.transpose(SR[0], [1, 2, 0])[:, :, 0])
+	GT = create_depth_color(np.transpose(GT[0], [1, 2, 0])[:, :, 0])
+	orig = create_depth_color(np.transpose(orig[0], [1, 2, 0])[:, :, 0])
+
+	img = np.concatenate((orig, GT, SR), axis=1)
+
+	img = Image.fromarray(img.astype('uint8'))
+	img.save('saved_images/image_%d.jpg' % (batch))
 
 class Solver(object):
 	def __init__(self, config, train_loader, valid_loader, test_loader):
@@ -149,6 +175,7 @@ class Solver(object):
 					SR_flat = SR_probs.view(SR_probs.size(0),-1)
 
 					GT_flat = GT.view(GT.size(0),-1)
+					GT_flat = GT_flat.float()
 					loss = self.criterion(SR_flat,GT_flat)
 					epoch_loss += loss.item()
 
@@ -165,6 +192,10 @@ class Solver(object):
 					JS += get_JS(SR,GT)
 					DC += get_DC(SR,GT)
 					length += images.size(0)
+
+					if (i + 1) % 100 == 0:
+						save_image(images, SR, GT, i)
+						print('epoch: %i [%i/%i]' %(epoch, i, self.train_loader.__len__()) )
 
 				acc = acc/length
 				SE = SE/length
@@ -188,113 +219,128 @@ class Solver(object):
 					for param_group in self.optimizer.param_groups:
 						param_group['lr'] = lr
 					print ('Decay learning rate to lr: {}.'.format(lr))
-				
-				
+
+				# unet_path = os.path.join(self.model_path, 'epoch: %i' % (epoch) + '%s-%d-%.4f-%d-%.4f.pkl' % (
+				# 	self.model_type, self.num_epochs, self.lr, self.num_epochs_decay, self.augmentation_prob))
+				# best_epoch = epoch
+				# best_unet = self.unet.state_dict()
+				# print('save model')
+				# torch.save(best_unet, unet_path)
+
+			# Save Best U-Net model
+
+			unet_path = os.path.join(self.model_path, '%s-%d-%.4f-%d-%.4f.pkl' % (
+			self.model_type, self.num_epochs, self.lr, self.num_epochs_decay, self.augmentation_prob))
+			best_epoch = epoch
+			best_unet = self.unet.state_dict()
+			print('save model')
+			torch.save(best_unet,unet_path)
+
 				#===================================== Validation ====================================#
-				self.unet.train(False)
-				self.unet.eval()
-
-				acc = 0.	# Accuracy
-				SE = 0.		# Sensitivity (Recall)
-				SP = 0.		# Specificity
-				PC = 0. 	# Precision
-				F1 = 0.		# F1 Score
-				JS = 0.		# Jaccard Similarity
-				DC = 0.		# Dice Coefficient
-				length=0
-				for i, (images, GT) in enumerate(self.valid_loader):
-
-					images = images.to(self.device)
-					GT = GT.to(self.device)
-					SR = F.sigmoid(self.unet(images))
-					acc += get_accuracy(SR,GT)
-					SE += get_sensitivity(SR,GT)
-					SP += get_specificity(SR,GT)
-					PC += get_precision(SR,GT)
-					F1 += get_F1(SR,GT)
-					JS += get_JS(SR,GT)
-					DC += get_DC(SR,GT)
-						
-					length += images.size(0)
-					
-				acc = acc/length
-				SE = SE/length
-				SP = SP/length
-				PC = PC/length
-				F1 = F1/length
-				JS = JS/length
-				DC = DC/length
-				unet_score = JS + DC
-
-				print('[Validation] Acc: %.4f, SE: %.4f, SP: %.4f, PC: %.4f, F1: %.4f, JS: %.4f, DC: %.4f'%(acc,SE,SP,PC,F1,JS,DC))
-				
-				'''
-				torchvision.utils.save_image(images.data.cpu(),
-											os.path.join(self.result_path,
-														'%s_valid_%d_image.png'%(self.model_type,epoch+1)))
-				torchvision.utils.save_image(SR.data.cpu(),
-											os.path.join(self.result_path,
-														'%s_valid_%d_SR.png'%(self.model_type,epoch+1)))
-				torchvision.utils.save_image(GT.data.cpu(),
-											os.path.join(self.result_path,
-														'%s_valid_%d_GT.png'%(self.model_type,epoch+1)))
-				'''
-
-
-				# Save Best U-Net model
-				if unet_score > best_unet_score:
-					best_unet_score = unet_score
-					best_epoch = epoch
-					best_unet = self.unet.state_dict()
-					print('Best %s model score : %.4f'%(self.model_type,best_unet_score))
-					torch.save(best_unet,unet_path)
-					
+				# self.unet.train(False)
+				# self.unet.eval()
+				#
+				# acc = 0.	# Accuracy
+				# SE = 0.		# Sensitivity (Recall)
+				# SP = 0.		# Specificity
+				# PC = 0. 	# Precision
+				# F1 = 0.		# F1 Score
+				# JS = 0.		# Jaccard Similarity
+				# DC = 0.		# Dice Coefficient
+				# length=0
+				# for i, (images, GT) in enumerate(self.valid_loader):
+				#
+				# 	images = images.to(self.device)
+				# 	GT = GT.to(self.device)
+				# 	SR = F.sigmoid(self.unet(images))
+				# 	acc += get_accuracy(SR,GT)
+				# 	SE += get_sensitivity(SR,GT)
+				# 	SP += get_specificity(SR,GT)
+				# 	PC += get_precision(SR,GT)
+				# 	F1 += get_F1(SR,GT)
+				# 	JS += get_JS(SR,GT)
+				# 	DC += get_DC(SR,GT)
+				#
+				# 	length += images.size(0)
+				#
+				# acc = acc/length
+				# SE = SE/length
+				# SP = SP/length
+				# PC = PC/length
+				# F1 = F1/length
+				# JS = JS/length
+				# DC = DC/length
+				# unet_score = JS + DC
+				#
+				# print('[Validation] Acc: %.4f, SE: %.4f, SP: %.4f, PC: %.4f, F1: %.4f, JS: %.4f, DC: %.4f'%(acc,SE,SP,PC,F1,JS,DC))
+				#
+				# '''
+				# torchvision.utils.save_image(images.data.cpu(),
+				# 							os.path.join(self.result_path,
+				# 										'%s_valid_%d_image.png'%(self.model_type,epoch+1)))
+				# torchvision.utils.save_image(SR.data.cpu(),
+				# 							os.path.join(self.result_path,
+				# 										'%s_valid_%d_SR.png'%(self.model_type,epoch+1)))
+				# torchvision.utils.save_image(GT.data.cpu(),
+				# 							os.path.join(self.result_path,
+				# 										'%s_valid_%d_GT.png'%(self.model_type,epoch+1)))
+				# '''
+				#
+				#
+				# # Save Best U-Net model
+				# if unet_score > best_unet_score:
+				# 	best_unet_score = unet_score
+				# 	best_epoch = epoch
+				# 	best_unet = self.unet.state_dict()
+				# 	print('Best %s model score : %.4f'%(self.model_type,best_unet_score))
+				# 	torch.save(best_unet,unet_path)
+				#
 			#===================================== Test ====================================#
-			del self.unet
-			del best_unet
-			self.build_model()
-			self.unet.load_state_dict(torch.load(unet_path))
-			
-			self.unet.train(False)
-			self.unet.eval()
-
-			acc = 0.	# Accuracy
-			SE = 0.		# Sensitivity (Recall)
-			SP = 0.		# Specificity
-			PC = 0. 	# Precision
-			F1 = 0.		# F1 Score
-			JS = 0.		# Jaccard Similarity
-			DC = 0.		# Dice Coefficient
-			length=0
-			for i, (images, GT) in enumerate(self.valid_loader):
-
-				images = images.to(self.device)
-				GT = GT.to(self.device)
-				SR = F.sigmoid(self.unet(images))
-				acc += get_accuracy(SR,GT)
-				SE += get_sensitivity(SR,GT)
-				SP += get_specificity(SR,GT)
-				PC += get_precision(SR,GT)
-				F1 += get_F1(SR,GT)
-				JS += get_JS(SR,GT)
-				DC += get_DC(SR,GT)
-						
-				length += images.size(0)
-					
-			acc = acc/length
-			SE = SE/length
-			SP = SP/length
-			PC = PC/length
-			F1 = F1/length
-			JS = JS/length
-			DC = DC/length
-			unet_score = JS + DC
-
-
-			f = open(os.path.join(self.result_path,'result.csv'), 'a', encoding='utf-8', newline='')
-			wr = csv.writer(f)
-			wr.writerow([self.model_type,acc,SE,SP,PC,F1,JS,DC,self.lr,best_epoch,self.num_epochs,self.num_epochs_decay,self.augmentation_prob])
-			f.close()
+			# del self.unet
+			# del best_unet
+			# self.build_model()
+			# self.unet.load_state_dict(torch.load(unet_path))
+			#
+			# self.unet.train(False)
+			# self.unet.eval()
+			#
+			# acc = 0.	# Accuracy
+			# SE = 0.		# Sensitivity (Recall)
+			# SP = 0.		# Specificity
+			# PC = 0. 	# Precision
+			# F1 = 0.		# F1 Score
+			# JS = 0.		# Jaccard Similarity
+			# DC = 0.		# Dice Coefficient
+			# length=0
+			# for i, (images, GT) in enumerate(self.valid_loader):
+			#
+			# 	images = images.to(self.device)
+			# 	GT = GT.to(self.device)
+			# 	SR = F.sigmoid(self.unet(images))
+			# 	acc += get_accuracy(SR,GT)
+			# 	SE += get_sensitivity(SR,GT)
+			# 	SP += get_specificity(SR,GT)
+			# 	PC += get_precision(SR,GT)
+			# 	F1 += get_F1(SR,GT)
+			# 	JS += get_JS(SR,GT)
+			# 	DC += get_DC(SR,GT)
+			#
+			# 	length += images.size(0)
+			#
+			# acc = acc/length
+			# SE = SE/length
+			# SP = SP/length
+			# PC = PC/length
+			# F1 = F1/length
+			# JS = JS/length
+			# DC = DC/length
+			# unet_score = JS + DC
+			#
+			#
+			# f = open(os.path.join(self.result_path,'result.csv'), 'a', encoding='utf-8', newline='')
+			# wr = csv.writer(f)
+			# wr.writerow([self.model_type,acc,SE,SP,PC,F1,JS,DC,self.lr,best_epoch,self.num_epochs,self.num_epochs_decay,self.augmentation_prob])
+			# f.close()
 			
 
 			
