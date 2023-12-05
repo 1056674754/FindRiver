@@ -11,15 +11,6 @@ def main(config):
         print('ERROR!! model_type should be selected in U_Net/R2U_Net/AttU_Net/R2AttU_Net')
         print('Your input for model_type was %s'%config.model_type)
         return
-
-    # Create directories if not exist
-    if not os.path.exists(config.model_path):
-        os.makedirs(config.model_path)
-    if not os.path.exists(config.result_path):
-        os.makedirs(config.result_path)
-    config.result_path = os.path.join(config.result_path,config.model_type)
-    if not os.path.exists(config.result_path):
-        os.makedirs(config.result_path)
     
     lr = random.random()*0.0005 + 0.0000005
     augmentation_prob= random.random()*0.7
