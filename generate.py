@@ -3,7 +3,7 @@ from generate_data_loader import  get_loader
 from PIL import Image
 import numpy as np
 from network import U_Net
-from utils import utils
+import utils
 import torch
 
 def main(config):
